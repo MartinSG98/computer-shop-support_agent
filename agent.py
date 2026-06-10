@@ -200,6 +200,10 @@ def invoke(payload):
     match = re.fullmatch(r"<response>(.*)</response>", text, flags=re.DOTALL)
     if match:
         text = match.group(1).strip()
+    # Normalize typographic Unicode (non-breaking spaces/hyphens) to plain
+    # ASCII and drop stray markdown emphasis - this is a plain-text chat.
+    text = text.translate(str.maketrans({" ": " ", " ": " ", "‑": "-", "–": "-", "—": "-"}))
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     return {"reply": text}
 
 

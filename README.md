@@ -8,11 +8,9 @@ everything else.
 ## How it works
 
 - [Strands Agents](https://strandsagents.com) provides the agent loop.
-- The model is OpenAI's gpt-oss-120b on Bedrock (`openai.gpt-oss-120b-1:0`), chosen
-  in a bake-off against Nova Lite/Nova 2 Lite/Nemotron for one decisive trait:
-  disciplined tool use on hard catalog questions (it was the only one to correctly
-  cross-reference which cases fit a PSU). Steered by a structured system prompt
-  (explicit rules, few-shot examples).
+- The model is OpenAI's gpt-oss-120b on Bedrock (`openai.gpt-oss-120b-1:0`),
+  chosen in a bake-off across several models (see Model choice below). Steered
+  by a structured system prompt (explicit rules, few-shot examples).
 - `bedrock_agentcore` wraps the agent as the HTTP service that
   [Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/bedrock/agentcore/) expects,
   so the same file runs locally and in the cloud.
@@ -36,6 +34,26 @@ fragment) against name, brand, category and description. A small alias map trans
 customer vocabulary ("gpu", "ram", "psu") into the category slugs that actually appear
 on products. Results are compact, JSON-safe summaries, sorted into shape for the model
 and capped at 20.
+
+## Model choice
+
+The agent's hardest job is compatibility questions ("which of your cases fit
+this PSU?"), which require cross-referencing one product against every case in
+the catalog and naming both the fits and the misfits. We bake-tested several
+Bedrock serverless models on exactly that question:
+
+| Model | Result |
+| --- | --- |
+| Amazon Nova Lite | Applied the right rule, but the lists were incomplete or wrong on every attempt |
+| NVIDIA Nemotron 3 Nano | Ignored the tools entirely and improvised ("I don't store stock info") |
+| Amazon Nova 2 Lite | Skipped the tool on follow-ups, then wrongly claimed every case fits |
+| OpenAI gpt-oss-120b | Correct rule, all 11 fitting cases named, and the one SFX-only case called out |
+
+gpt-oss-120b was the only model to pass, at roughly $0.15/$0.60 per million
+tokens - about $0.002 per customer question with the full-catalog tool. Best
+results for the price by a wide margin. (Claude Haiku 4.5 would likely pass
+too at several times the cost; untested because Anthropic models require a
+use-case form first.)
 
 ## API
 
