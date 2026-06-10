@@ -1,0 +1,24 @@
+{
+  "agentRuntimeId": "computer_shop_support_agent-BtT8C1A7pO",
+  "description": "Computer Shop customer support agent (Strands + Nova Lite, catalog-grounded).",
+  "roleArn": "arn:aws:iam::802939327066:role/computer-shop-agent-exec",
+  "agentRuntimeArtifact": {
+    "codeConfiguration": {
+      "code": {
+        "s3": {
+          "bucket": "computer-shop-agent-artifacts-802939327066",
+          "prefix": "support-agent/agent.zip"
+        }
+      },
+      "entryPoint": ["agent.py"],
+      "runtime": "PYTHON_3_12"
+    }
+  },
+  "networkConfiguration": {
+    "networkMode": "PUBLIC"
+  },
+  "environmentVariables": {
+    "PRODUCTS_TABLE": "computer-shop-products",
+    "CATEGORIES_TABLE": "computer-shop-categories"
+  }
+}
