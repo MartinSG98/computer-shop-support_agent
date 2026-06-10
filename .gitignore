@@ -3,6 +3,12 @@
 __pycache__/
 *.pyc
 
+# Deploy build artifacts (CI builds its own)
+package/
+agent.zip
+payload.json
+response.json
+
 # AgentCore starter toolkit deployment state
 .bedrock_agentcore.yaml
 .agentcore/

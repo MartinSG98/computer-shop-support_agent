@@ -1,0 +1,62 @@
+name: Deploy support agent
+
+on:
+  push:
+    branches: [main]
+    # Docs-only changes don't affect the runtime.
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+
+# OIDC: assume the agent deploy role keylessly. No stored AWS keys.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: support-agent-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # AgentCore Runtime is Linux ARM64 on Python 3.12, so the package must
+      # contain aarch64 wheels regardless of the runner's own architecture.
+      - name: Build agent package
+        run: |
+          rm -rf package agent.zip
+          pip install -r requirements.txt --target package \
+            --platform manylinux2014_aarch64 --only-binary=:all: --python-version 3.12
+          cp agent.py package/
+          (cd package && zip -r -q ../agent.zip .)
+          ls -lh agent.zip
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Repository variable (not a secret); OIDC trust restricts who can assume.
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # deploy/update-runtime.json is the single source of truth for where the
+      # code lives and how the runtime is configured; the bucket/key for the
+      # upload are read from it rather than duplicated as repo variables.
+      - name: Upload code and refresh runtime
+        run: |
+          BUCKET="$(jq -r '.agentRuntimeArtifact.codeConfiguration.code.s3.bucket' deploy/update-runtime.json)"
+          KEY="$(jq -r '.agentRuntimeArtifact.codeConfiguration.code.s3.prefix' deploy/update-runtime.json)"
+          aws s3 cp agent.zip "s3://$BUCKET/$KEY"
+          # The runtime caches the zip it booted with; the update call (full
+          # config, not a patch) is what makes it pick up the new upload.
+          aws bedrock-agentcore-control update-agent-runtime \
+            --cli-input-json file://deploy/update-runtime.json
