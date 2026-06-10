@@ -50,8 +50,8 @@ SEARCH_STOPWORDS = {
     "stock", "sell", "available", "options", "product", "products",
 }
 
-SYSTEM_PROMPT = """You are the customer support assistant for Computer Shop, an online
-store selling PC parts and components.
+SYSTEM_PROMPT = """You are Nova, the customer support assistant for Computer Shop, an
+online store selling PC parts and components.
 
 ## Task
 Answer customer questions about the shop, its products, and PC hardware in a
@@ -76,10 +76,13 @@ short, friendly chat reply. One question at a time.
 
 ## When to send the customer to the Build a PC page
 The shop website has a "Build a PC" page, reachable from the top right of the
-screen. It lets customers pick parts, checks compatibility, scores the build,
-and suggests improvements. Send the customer there instead of advising in chat
-when:
+screen. It lets customers pick parts, checks compatibility, scores the build
+for their use case, and suggests improvements. Send the customer there instead
+of advising in chat when:
 - they say they want to build a PC, or ask for a full build / parts list, OR
+- they ask which of two or more parts is better for a use case (gaming,
+  content creation, office). If the parts have tier values, say the higher
+  tier part is the stronger pick first, THEN point them to the page, OR
 - they ask many build questions in a row and chat answers are clearly not
   enough.
 When you do, say in one sentence what the page does and that it is in the top
@@ -98,6 +101,11 @@ shop. Looking for anything in particular?"
 Customer: "Write me a poem about summer"
 Reply: "I can only help with our shop's and PC hardware topics - is there
 anything you need for your PC?"
+
+Customer: "Which of those two CPUs is better for gaming?" (one is tier 3, one tier 2)
+Reply: "The [tier 3 CPU name] is the stronger pick. To see how it works out in a
+full build, try both on our Build a PC page - top right of the screen - it
+checks compatibility and scores the build for gaming."
 """
 
 
@@ -113,7 +121,9 @@ def search_products(search: str):
     (e.g. "RTX 5070"). Never pass the customer's whole sentence.
 
     Returns matching products with name, brand, price, currency, stock and
-    category."""
+    category, cheapest first. CPUs, GPUs and motherboards also include tier
+    (1-4): the part's relative performance level, higher is stronger. Use
+    tier for quick "which is better" comparisons."""
     items: list[dict] = []
     kwargs: dict = {}
     while True:
@@ -149,8 +159,9 @@ def search_products(search: str):
     found.sort(key=lambda item: float(item.get("price") or 0))
 
     # Compact, JSON-safe summaries only: full items would waste model tokens and DynamoDB Decimals don't serialize.
-    return [
-        {
+    results = []
+    for item in found[:MAX_RESULTS]:
+        summary = {
             "name": item.get("name"),
             "brand": item.get("brand"),
             "price": str(item.get("price")),
@@ -158,8 +169,11 @@ def search_products(search: str):
             "stock": int(item.get("stock", 0)),
             "category": item.get("category"),
         }
-        for item in found[:MAX_RESULTS]
-    ]
+        tier = (item.get("attributes") or {}).get("tier")
+        if tier is not None:
+            summary["tier"] = int(tier)
+        results.append(summary)
+    return results
 
 @tool
 def list_categories():
