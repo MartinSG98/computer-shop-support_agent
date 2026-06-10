@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# AgentCore starter toolkit deployment state
+.bedrock_agentcore.yaml
+.agentcore/
+
+# Local env / secrets
+.env
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
