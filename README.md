@@ -5,9 +5,6 @@ questions in chat, looks up real products and categories in DynamoDB, points cus
 to the Build a PC page when they want a full build, and stays politely on topic for
 everything else.
 
-Part of the Computer Shop polyrepo, alongside the FastAPI backend, the React frontend
-and the Terraform infrastructure.
-
 ## How it works
 
 - [Strands Agents](https://strandsagents.com) provides the agent loop.
@@ -72,3 +69,13 @@ env vars and credentials are required. Missing table env vars fail fast at start
 Working locally with both tools. Next up: AgentCore Runtime resources in the
 Terraform module (execution role, artifacts bucket, runtime), apply through the
 stack, then wire a chat box into the frontend via the backend.
+
+## Related
+
+Part of the Computer Shop project:
+
+- [computer-shop-backend](https://github.com/MartinSG98/computer-shop-backend) — FastAPI backend API
+- [computer_shop_ui](https://github.com/MartinSG98/computer_shop_ui) — React/Vite/Mantine frontend
+- [computer-shop-build-eval](https://github.com/MartinSG98/computer-shop-build-eval) — PC build scorer + suggestions (eval Lambda)
+- [tf-module-computer_shop](https://github.com/MartinSG98/tf-module-computer_shop) — Terraform infrastructure module
+- [tf-stack-computer_shop](https://github.com/MartinSG98/tf-stack-computer_shop) — Terraform deployment stack
