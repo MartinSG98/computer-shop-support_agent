@@ -61,6 +61,13 @@ short, friendly chat reply. One question at a time.
    shop doesn't stock it and suggest browsing the shop.
 6. When the customer asks what the shop sells or what kinds of products are
    available, use the list_categories tool and answer from its results.
+7. For fit and compatibility questions ("does X fit / work with Y"), decide
+   ONLY by comparing the products' attributes as described by the get_catalog
+   tool. Work only with products from the relevant category (cases are only
+   the products whose category is "cases"); go through every one of them,
+   and state both which fit and which do not. If the attributes cannot
+   decide it, say you are not certain and suggest the Build a PC page, which
+   checks compatibility exactly. Never guess about compatibility.
 
 ## When to send the customer to the Build a PC page
 The shop website has a "Build a PC" page, reachable from the top right of the
@@ -106,10 +113,17 @@ def get_catalog():
 
     Each product has name, brand, category, price, currency, stock,
     description and specs. Graphics cards also have vendor (NVIDIA, AMD or
-    Intel - the chip maker, distinct from the board brand). CPUs, GPUs and
-    motherboards also have tier (1-4): the part's relative performance level,
-    higher is stronger. Use tier for "which is better" comparisons and specs
-    for detail questions."""
+    Intel - the chip maker, distinct from the board brand).
+
+    Buildable parts also have attributes: compatibility data. attributes.tier
+    (1-4) is the part's relative performance level, higher is stronger - use
+    it for "which is better" comparisons. The rest answers fit questions:
+    - a PSU fits a case when the PSU's form_factor is in the case's
+      psu_form_factors
+    - a GPU fits a case when its length_mm <= the case's max_gpu_length_mm
+    - a CPU fits a motherboard when their socket matches
+    - a cooler supports a CPU when the CPU's socket is in the cooler's
+      sockets and its tdp_rating_w >= the CPU's tdp_w"""
     items: list[dict] = []
     kwargs: dict = {}
     while True:
@@ -122,9 +136,9 @@ def get_catalog():
 
     items.sort(key=lambda item: (item.get("category", ""), float(item.get("price") or 0)))
 
-    # Compact records: everything a shopper could ask about, nothing machine-
-    # only (compatibility attributes, image keys) that would dilute a small
-    # model's attention across ~130 products.
+    # Full records minus ids and image keys, the only fields with no possible
+    # use in conversation. Compatibility attributes stay in: fit questions
+    # ("does this PSU fit that case?") are only answerable from them.
     catalog = []
     for item in items:
         record = {
@@ -137,9 +151,9 @@ def get_catalog():
             "description": item.get("description"),
             "specs": _json_safe(item.get("specs") or {}),
         }
-        tier = (item.get("attributes") or {}).get("tier")
-        if tier is not None:
-            record["tier"] = int(tier)
+        attributes = item.get("attributes")
+        if attributes:
+            record["attributes"] = _json_safe(attributes)
         if item.get("category") == "graphics-cards":
             vendor = _gpu_vendor(item.get("name", ""))
             if vendor is not None:
@@ -164,7 +178,7 @@ def list_categories():
 
 
 agent = Agent(
-    model="amazon.nova-lite-v1:0",
+    model="openai.gpt-oss-120b-1:0",
     system_prompt=SYSTEM_PROMPT,
     tools=[get_catalog, list_categories],
 )
@@ -175,9 +189,13 @@ def invoke(payload):
     """AgentCore entrypoint: {"prompt": "..."} in, {"reply": "..."} out."""
     user_message = payload.get("prompt", "Hello! How can I help you today?")
     result = agent(user_message)
-    text = result.message["content"][0]["text"]
-    # Nova Lite wraps output in chat-protocol tags: reasoning in <thinking>,
-    # and sometimes the answer itself in <response>. Customers get plain prose.
+    # Reasoning models emit a reasoning block before the text block, so take
+    # the first block that actually has text rather than assuming position 0.
+    blocks = result.message["content"]
+    text = next((block["text"] for block in blocks if "text" in block), "")
+    # Some models wrap output in chat-protocol tags: reasoning in <thinking>,
+    # sometimes the answer itself in <response>. Strip both defensively so
+    # customers always get plain prose.
     text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL).strip()
     match = re.fullmatch(r"<response>(.*)</response>", text, flags=re.DOTALL)
     if match:

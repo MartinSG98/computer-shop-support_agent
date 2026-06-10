@@ -1,6 +1,6 @@
 {
   "agentRuntimeId": "computer_shop_support_agent-BtT8C1A7pO",
-  "description": "Computer Shop customer support agent (Strands + Nova Lite, catalog-grounded).",
+  "description": "Computer Shop customer support agent (Strands, catalog-grounded).",
   "roleArn": "arn:aws:iam::802939327066:role/computer-shop-agent-exec",
   "agentRuntimeArtifact": {
     "codeConfiguration": {
