@@ -1,4 +1,5 @@
 import os
+import re
 
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
@@ -166,7 +167,11 @@ def invoke(payload):
     """AgentCore entrypoint: {"prompt": "..."} in, {"reply": "..."} out."""
     user_message = payload.get("prompt", "Hello! How can I help you today?")
     result = agent(user_message)
-    return {"reply": result.message["content"][0]["text"]}
+    text = result.message["content"][0]["text"]
+    # Nova Lite prefixes replies with its reasoning in <thinking> tags;
+    # customers only ever get the prose after it.
+    text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL).strip()
+    return {"reply": text}
 
 
 if __name__ == "__main__":
