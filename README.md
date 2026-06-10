@@ -1,8 +1,9 @@
 # Computer Shop Support Agent
 
 Customer support agent for the Computer Shop project. Answers product and PC hardware
-questions in chat, points customers to the Build a PC page when they want a full build,
-and stays politely on topic for everything else.
+questions in chat, looks up real products and categories in DynamoDB, points customers
+to the Build a PC page when they want a full build, and stays politely on topic for
+everything else.
 
 Part of the Computer Shop polyrepo, alongside the FastAPI backend, the React frontend
 and the Terraform infrastructure.
@@ -11,36 +12,63 @@ and the Terraform infrastructure.
 
 - [Strands Agents](https://strandsagents.com) provides the agent loop.
 - The model is Amazon Nova Lite on Bedrock (`amazon.nova-lite-v1:0`), the same model
-  the build evaluator uses.
+  the build evaluator uses, steered by a structured system prompt tuned for small
+  models (explicit rules, category vocabulary, few-shot examples).
 - `bedrock_agentcore` wraps the agent as the HTTP service that
   [Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/bedrock/agentcore/) expects,
   so the same file runs locally and in the cloud.
 - Deployment target is AgentCore Runtime in eu-west-2 using direct code deployment
-  (zip via S3, no container).
+  (zip via S3, no container), provisioned through the project's Terraform module and
+  stack.
 
-The whole agent currently lives in `agent.py`: a structured system prompt tuned for
-Nova Lite, plus the entrypoint that AgentCore invokes.
+The whole agent lives in `agent.py`.
+
+## Tools
+
+The agent is grounded in the shop's DynamoDB tables through two read-only tools:
+
+| Tool | Answers | Source |
+| --- | --- | --- |
+| `search_products` | "Whats your cheapest GPU?", "Do you have AMD CPUs in stock?" | products table |
+| `list_categories` | "What do you actually sell?" | categories table |
+
+`search_products` matches a single term (category slug, brand, or product name
+fragment) against name, brand, category and description. A small alias map translates
+customer vocabulary ("gpu", "ram", "psu") into the category slugs that actually appear
+on products. Results are compact, JSON-safe summaries, sorted into shape for the model
+and capped at 20.
+
+## API
+
+`POST /invocations` with `{"prompt": "..."}` returns `{"reply": "..."}`.
 
 ## Run it locally
 
-You need Python 3.10 to 3.13 and AWS credentials with Bedrock access in eu-west-2.
+You need Python 3.10 to 3.13 and AWS credentials with Bedrock and DynamoDB read
+access in eu-west-2.
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+$env:PRODUCTS_TABLE = "computer-shop-products"
+$env:CATEGORIES_TABLE = "computer-shop-categories"
 python agent.py
 ```
 
 Then from another terminal:
 
 ```powershell
-Invoke-RestMethod -Uri http://localhost:8080/invocations -Method Post `
-  -ContentType "application/json" -Body '{"prompt": "Do you sell graphics cards?"}'
+$r = Invoke-RestMethod -Uri http://localhost:8080/invocations -Method Post `
+  -ContentType "application/json" -Body '{"prompt": "Whats your cheapest GPU?"}'
+$r.reply
 ```
+
+The agent makes real Bedrock and DynamoDB calls even when running locally, so the
+env vars and credentials are required. Missing table env vars fail fast at startup.
 
 ## Status
 
-Work in progress. Done so far: minimal agent with system prompt, local run. Next up:
-catalog lookup tool (DynamoDB), then deployment to AgentCore Runtime and wiring into
-the backend.
+Working locally with both tools. Next up: AgentCore Runtime resources in the
+Terraform module (execution role, artifacts bucket, runtime), apply through the
+stack, then wire a chat box into the frontend via the backend.
