@@ -6,9 +6,10 @@ from strands import Agent, tool
 
 app = BedrockAgentCoreApp()
 
-# Built once per process; every tool call reuses the same table handle.
-PRODUCTS_TABLE = os.environ["PRODUCTS_TABLE"]
-_table = boto3.resource("dynamodb").Table(PRODUCTS_TABLE)
+# Built once per process; every tool call reuses the same table handles.
+_dynamodb = boto3.resource("dynamodb")
+_products_table = _dynamodb.Table(os.environ["PRODUCTS_TABLE"])
+_categories_table = _dynamodb.Table(os.environ["CATEGORIES_TABLE"])
 
 MAX_RESULTS = 20
 
@@ -61,6 +62,8 @@ short, friendly chat reply. One question at a time.
    search_products tool and answer only from what it returns. If it returns
    nothing, say the shop doesn't seem to stock that and suggest browsing the
    shop.
+6. When the customer asks what the shop sells or what kinds of products are
+   available, use the list_categories tool and answer from its results.
 
 ## When to send the customer to the Build a PC page
 The shop website has a "Build a PC" page, reachable from the top right of the
@@ -105,7 +108,7 @@ def search_products(search: str):
     items: list[dict] = []
     kwargs: dict = {}
     while True:
-        response = _table.scan(**kwargs)
+        response = _products_table.scan(**kwargs)
         items.extend(response.get("Items", []))
         last_key = response.get("LastEvaluatedKey")
         if not last_key:
@@ -136,11 +139,25 @@ def search_products(search: str):
         for item in matches[:MAX_RESULTS]
     ]
 
+@tool
+def list_categories():
+    """List all product categories the shop sells. Use this when the customer
+    asks what the shop sells or what types of products are available."""
+    items = _categories_table.scan().get("Items", [])
+    return [
+        {
+            "slug": item.get("slug"),
+            "name": item.get("name"),
+            "description": item.get("description"),
+        }
+        for item in sorted(items, key=lambda c: int(c.get("sort_order", 0)))
+    ]
+
 
 agent = Agent(
     model="amazon.nova-lite-v1:0",
     system_prompt=SYSTEM_PROMPT,
-    tools=[search_products],
+    tools=[search_products, list_categories],
 )
 
 
