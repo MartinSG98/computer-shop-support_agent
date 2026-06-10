@@ -63,7 +63,9 @@ short, friendly chat reply. One question at a time.
    available, use the list_categories tool and answer from its results.
 7. For fit and compatibility questions ("does X fit / work with Y"), decide
    ONLY by comparing the products' attributes as described by the get_catalog
-   tool. Name which products fit and which don't. If the attributes cannot
+   tool. Work only with products from the relevant category (cases are only
+   the products whose category is "cases"); go through every one of them,
+   and state both which fit and which do not. If the attributes cannot
    decide it, say you are not certain and suggest the Build a PC page, which
    checks compatibility exactly. Never guess about compatibility.
 
@@ -176,7 +178,7 @@ def list_categories():
 
 
 agent = Agent(
-    model="amazon.nova-lite-v1:0",
+    model="openai.gpt-oss-120b-1:0",
     system_prompt=SYSTEM_PROMPT,
     tools=[get_catalog, list_categories],
 )
@@ -187,9 +189,13 @@ def invoke(payload):
     """AgentCore entrypoint: {"prompt": "..."} in, {"reply": "..."} out."""
     user_message = payload.get("prompt", "Hello! How can I help you today?")
     result = agent(user_message)
-    text = result.message["content"][0]["text"]
-    # Nova Lite wraps output in chat-protocol tags: reasoning in <thinking>,
-    # and sometimes the answer itself in <response>. Customers get plain prose.
+    # Reasoning models emit a reasoning block before the text block, so take
+    # the first block that actually has text rather than assuming position 0.
+    blocks = result.message["content"]
+    text = next((block["text"] for block in blocks if "text" in block), "")
+    # Some models wrap output in chat-protocol tags: reasoning in <thinking>,
+    # sometimes the answer itself in <response>. Strip both defensively so
+    # customers always get plain prose.
     text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL).strip()
     match = re.fullmatch(r"<response>(.*)</response>", text, flags=re.DOTALL)
     if match:

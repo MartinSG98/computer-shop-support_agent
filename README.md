@@ -8,9 +8,11 @@ everything else.
 ## How it works
 
 - [Strands Agents](https://strandsagents.com) provides the agent loop.
-- The model is Amazon Nova Lite on Bedrock (`amazon.nova-lite-v1:0`), the same model
-  the build evaluator uses, steered by a structured system prompt tuned for small
-  models (explicit rules, category vocabulary, few-shot examples).
+- The model is OpenAI's gpt-oss-120b on Bedrock (`openai.gpt-oss-120b-1:0`), chosen
+  in a bake-off against Nova Lite/Nova 2 Lite/Nemotron for one decisive trait:
+  disciplined tool use on hard catalog questions (it was the only one to correctly
+  cross-reference which cases fit a PSU). Steered by a structured system prompt
+  (explicit rules, few-shot examples).
 - `bedrock_agentcore` wraps the agent as the HTTP service that
   [Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/bedrock/agentcore/) expects,
   so the same file runs locally and in the cloud.
