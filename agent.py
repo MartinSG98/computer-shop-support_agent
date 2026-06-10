@@ -42,6 +42,14 @@ SEARCH_ALIASES = {
     "headset": "headsets",
 }
 
+# Filler words that carry no product signal when the model sends a phrase.
+SEARCH_STOPWORDS = {
+    "the", "and", "for", "you", "your", "our", "have", "with", "from",
+    "what", "whats", "which", "any", "all", "guys", "shop", "store",
+    "cheapest", "cheap", "best", "most", "expensive", "price", "prices",
+    "stock", "sell", "available", "options", "product", "products",
+}
+
 SYSTEM_PROMPT = """You are the customer support assistant for Computer Shop, an online
 store selling PC parts and components.
 
@@ -116,16 +124,29 @@ def search_products(search: str):
             break
         kwargs["ExclusiveStartKey"] = last_key
 
+    # The model sometimes sends a whole phrase despite the docstring, so don't
+    # rely on exact terms: alias the full phrase, then every meaningful word,
+    # and match an item on any of them.
     term = search.lower().strip()
-    term = SEARCH_ALIASES.get(term, term)
-    matches = [
-        item
-        for item in items
-        if term in item.get("name", "").lower()
-        or term in item.get("brand", "").lower()
-        or term in item.get("category", "").lower()
-        or term in item.get("description", "").lower()
-    ]
+    needles = {SEARCH_ALIASES.get(term, term)}
+    for word in re.findall(r"[a-z0-9]+", term):
+        if len(word) >= 3 and word not in SEARCH_STOPWORDS:
+            needles.add(SEARCH_ALIASES.get(word, word))
+
+    def matches(item: dict) -> bool:
+        haystack = " ".join(
+            (
+                item.get("name", ""),
+                item.get("brand", ""),
+                item.get("category", ""),
+                item.get("description", ""),
+            )
+        ).lower()
+        return any(needle in haystack for needle in needles)
+
+    found = [item for item in items if matches(item)]
+    # Cheapest first, so "cheapest X" questions survive the result cap.
+    found.sort(key=lambda item: float(item.get("price") or 0))
 
     # Compact, JSON-safe summaries only: full items would waste model tokens and DynamoDB Decimals don't serialize.
     return [
@@ -137,7 +158,7 @@ def search_products(search: str):
             "stock": int(item.get("stock", 0)),
             "category": item.get("category"),
         }
-        for item in matches[:MAX_RESULTS]
+        for item in found[:MAX_RESULTS]
     ]
 
 @tool
@@ -168,9 +189,12 @@ def invoke(payload):
     user_message = payload.get("prompt", "Hello! How can I help you today?")
     result = agent(user_message)
     text = result.message["content"][0]["text"]
-    # Nova Lite prefixes replies with its reasoning in <thinking> tags;
-    # customers only ever get the prose after it.
+    # Nova Lite wraps output in chat-protocol tags: reasoning in <thinking>,
+    # and sometimes the answer itself in <response>. Customers get plain prose.
     text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL).strip()
+    match = re.fullmatch(r"<response>(.*)</response>", text, flags=re.DOTALL)
+    if match:
+        text = match.group(1).strip()
     return {"reply": text}
 
 
