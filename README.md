@@ -1,5 +1,7 @@
 # Computer Shop Support Agent
 
+![CI](https://github.com/MartinSG98/computer-shop-support-agent/actions/workflows/ci.yml/badge.svg)
+
 Customer support agent for the Computer Shop project. Answers product and PC hardware
 questions in chat, looks up real products and categories in DynamoDB, points customers
 to the Build a PC page when they want a full build, and stays politely on topic for
